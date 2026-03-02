@@ -5,9 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>UKETUGI 議事録生成ツール</title>
 
-  <!-- ===== 設定ファイル（APIキー等） ===== -->
-  <!-- config.example.js をコピーして config.js を作成してください -->
-  <script src="config.js"></script>
+  <!-- ===== アプリ設定 ===== -->
+  <script>
+    // プロキシURLとモデルは固定（変更不要）
+    const APP_SETTINGS = {
+      PROXY_URL: 'https://uketugi-proxy.nagai-dbf.workers.dev',
+      MODEL: 'claude-sonnet-4-20250514',
+    };
+  </script>
 
   <!-- ===== 外部ライブラリ（CDN） ===== -->
   <!-- docx.js: ブラウザ上でWord文書(.docx)を生成するライブラリ -->
@@ -283,29 +288,6 @@
       display: block;
     }
 
-    /* ===== 設定バナー ===== */
-    .config-banner {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 12px 16px;
-      border-radius: var(--radius);
-      font-size: 13px;
-      margin-bottom: 20px;
-      background: #F0FDF4;
-      border: 1px solid #BBF7D0;
-      color: #166534;
-    }
-    .config-banner.error {
-      background: #FEF2F2;
-      border: 1px solid #FECACA;
-      color: #991B1B;
-    }
-    .config-icon {
-      font-size: 16px;
-      flex-shrink: 0;
-    }
-
     /* ===== フッター ===== */
     .footer {
       text-align: center;
@@ -325,10 +307,17 @@
 
   <div class="container">
 
-    <!-- ===== 設定状態バナー ===== -->
-    <div class="config-banner" id="configBanner">
-      <span class="config-icon">⚙️</span>
-      <span id="configStatus">設定を確認中...</span>
+    <!-- ===== 合言葉入力 ===== -->
+    <div class="card">
+      <div class="card-title">
+        <div class="icon">🔑</div>
+        アクセス認証
+      </div>
+      <div class="form-group">
+        <label>合言葉</label>
+        <input type="password" id="accessToken" placeholder="合言葉を入力してください" autocomplete="off">
+        <p class="hint">※ 管理者から共有された合言葉を入力してください</p>
+      </div>
     </div>
 
     <!-- ===== 会議情報 ===== -->
@@ -339,7 +328,7 @@
       </div>
       <div class="form-group">
         <label>会議名</label>
-        <input type="text" id="meetingName" placeholder="例: UKETUGI 定例会議" value=>
+        <input type="text" id="meetingName" placeholder="例: UKETUGI 定例会議">
       </div>
       <div class="form-group">
         <label>開催日時</label>
@@ -347,11 +336,11 @@
       </div>
       <div class="form-group">
         <label>参加者（カンマ区切り）</label>
-        <input type="text" id="participants" placeholder="例: 佐藤、小林、長井">
+        <input type="text" id="participants" placeholder="例: 黒越、小林、佐藤、伊藤、長井">
       </div>
       <div class="form-group">
         <label>場所・形式</label>
-        <input type="text" id="meetingLocation" placeholder="例: オンライン会議" value=>
+        <input type="text" id="meetingLocation" placeholder="例: オンライン会議">
       </div>
     </div>
 
@@ -417,33 +406,7 @@ let generatedFileName = '';   // 生成済みファイル名
 // UI操作
 // =============================================================================
 
-// 設定ファイル状態チェック（ページ読み込み時）
-function checkConfig() {
-  const banner = document.getElementById('configBanner');
-  const status = document.getElementById('configStatus');
-
-  if (typeof APP_CONFIG === 'undefined') {
-    banner.classList.add('error');
-    status.textContent = '⚠ config.js が見つかりません。config.example.js をコピーして config.js を作成してください。';
-    document.getElementById('generateBtn').disabled = true;
-    return;
-  }
-  if (!APP_CONFIG.PROXY_URL || APP_CONFIG.PROXY_URL.includes('your-')) {
-    banner.classList.add('error');
-    status.textContent = '⚠ config.js のプロキシURLが未設定です。';
-    document.getElementById('generateBtn').disabled = true;
-    return;
-  }
-  if (!APP_CONFIG.ACCESS_TOKEN || APP_CONFIG.ACCESS_TOKEN === '') {
-    banner.classList.add('error');
-    status.textContent = '⚠ config.js の合言葉（ACCESS_TOKEN）が未設定です。';
-    document.getElementById('generateBtn').disabled = true;
-    return;
-  }
-
-  banner.classList.remove('error');
-  status.textContent = '✅ 設定OK — API接続準備完了';
-}
+// 設定チェック不要（合言葉はボタン押下時にチェック）
 
 // ファイルアップロード処理
 document.getElementById('fileInput').addEventListener('change', function(e) {
@@ -488,15 +451,15 @@ function downloadAgain() {
 async function handleGenerate() {
   hideError();
 
-  // --- config.js チェック ---
-  if (typeof APP_CONFIG === 'undefined' || !APP_CONFIG.ACCESS_TOKEN) {
-    showError('config.js が未設定です。config.example.js をコピーして合言葉を設定してください。');
+  // --- 合言葉チェック ---
+  const accessToken = document.getElementById('accessToken').value.trim();
+  if (!accessToken) {
+    showError('合言葉を入力してください');
     return;
   }
 
-  const proxyUrl = APP_CONFIG.PROXY_URL || '';
-  const accessToken = APP_CONFIG.ACCESS_TOKEN || '';
-  const model = APP_CONFIG.MODEL || 'claude-sonnet-4-20250514';
+  const proxyUrl = APP_SETTINGS.PROXY_URL;
+  const model = APP_SETTINGS.MODEL;
 
   // --- バリデーション ---
   const meetingName = document.getElementById('meetingName').value.trim();
@@ -935,7 +898,6 @@ function formatDateJa(d) {
   const now = new Date();
   const local = new Date(now.getTime() - now.getTimezoneOffset() * 60000);
   document.getElementById('meetingDate').value = local.toISOString().slice(0, 16);
-  checkConfig();
 })();
 </script>
 
